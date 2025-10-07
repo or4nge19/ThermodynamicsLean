@@ -14,7 +14,7 @@ The formalization is based on the theory presented in the following two papers. 
 
 ## Formalization Structure
 
-The project is organized into a series of modules, each building upon the previous ones. This structure is designed to mirror the logical development of the theory in the source material.
+The project is organized into a series of modules that attempt to mirror the logical development of the theory in the original paper.
 
 *   `LY/Axioms.lean`: Defines the core `ThermoWorld` class, the basic concepts of systems and states, the axioms of adiabatic accessibility (A1-A6), and the coherence axioms.
 *   `LY/Stability.lean`: Focuses on the Stability Axiom (A6) and derives the δ-ε formulation from the sequential one.
@@ -24,10 +24,7 @@ The project is organized into a series of modules, each building upon the previo
 *   `LY/Consequences.lean`: Formalizes the immediate consequences of the axioms and the Cancellation Law, such as the properties of strict accessibility.
 *   `LY/Entropy/Principle.lean`: Defines the abstract `EntropyFunction` structure.
 *   `LY/Entropy/Construction.lean`: Contains the main constructive proof of the existence and properties of a canonical entropy function.
-
-## Mapping Formalization to Source Material
-
-The components of this formalization can be traced to specific sections and theorems within the *Physics Reports* paper.
+  
 
 #### **1. Axiomatic Framework** (`LY/Axioms.lean`)
 
@@ -39,7 +36,7 @@ This module corresponds to **Section II.A (Basic concepts)** and **Section II.C 
 
 #### **2. The Cancellation Law** (`LY/Cancellation.lean`)
 
-This file contains the formal proof of the **Cancellation Law (Theorem 2.1)**, which is stated in Section II.C. The paper provides a brief sketch of the proof. This module provides a complete, step-by-step verification, including:
+This file contains the formal proof of the **Cancellation Law (Theorem 2.1)**, which is stated in Section II.C. The paper provides a brief sketch of the proof. This module provides a complete verification, including:
 
 *   The `S_step` lemma, which proves the core inductive step of the argument.
 *   The `catalyst_amplification` lemma, which corresponds to **Lemma 2.2**.
@@ -64,4 +61,4 @@ This module is the largest and corresponds to the constructive proof of entropy 
 
 ## License
 
-The code in this repository is released under the Apache 2.0 license, as stated in the file headers.
+The code in this repository is released under the Apache 2.0 license.
