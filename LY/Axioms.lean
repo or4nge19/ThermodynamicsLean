@@ -248,7 +248,7 @@ structure IsSimpleSystem (n : ℕ) (Γ : System) where
 
 /--
 A `SimpleSystemFamily` is a collection of systems that are all simple systems of the
-same dimension `n`. This class contains the axioms (A7, S1) and the crucial coherence
+same dimension `n`. This class contains the axioms (A7, S1) and the coherence
 axioms that govern how simple systems behave under scaling and composition.
 -/
 class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
