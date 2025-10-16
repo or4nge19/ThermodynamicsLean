@@ -24,6 +24,12 @@ Lieb and Yngvason. It includes:
 - Structural properties of systems (associativity, commutativity, etc.).
 - The six core axioms of adiabatic accessibility (A1-A6).
 - Coherence axioms that relate system equalities to state equivalences.
+- The `IsSimpleSystem` and `SimpleSystemFamily` abstractions:
+  identification of simple systems with open, convex subsets of a
+  Euclidean coordinate space, closure under positive scaling, and the
+  additional axioms (A7, S1) used in the coordinate theory.
+- Definitions and basic lemmas for composition and scaling of
+  states, forward sectors, convexity results.
 -/
 
 namespace LY
@@ -252,9 +258,9 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
   scale_family_closed {Γ} (h_in : is_in_family Γ) {t : ℝ} (ht : 0 < t) :
     is_in_family (t • Γ)
   /-- **Coherence of Scaling and Coordinates (CSS)**: The coordinate map of the scaled
-      system `t•Γ` applied to the abstractly scaled state `t•X` yields exactly the
-      scalar product of `t` and the coordinates of `X`. This is the essential bridge
-      between abstract system algebra and concrete coordinate vector algebra. -/
+  system `t•Γ` applied to the abstractly scaled state `t•X` yields exactly the
+  scalar product of `t` and the coordinates of `X`. This allows to connect abstract system
+  algebra and concrete coordinate vector algebra. -/
   coord_of_scaled_state_eq_smul_coord {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) {t : ℝ} (ht : 0 < t) :
     let ss_Γ := get_ss_inst Γ h_in
     let ss_tΓ := get_ss_inst (t • Γ) (scale_family_closed h_in ht)
@@ -289,35 +295,27 @@ theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemF
   intro y₁ hy₁ y₂ hy₂ a b ha hb hab
   rcases hy₁ with ⟨Y₁, hY₁_in_sector, rfl⟩
   rcases hy₂ with ⟨Y₂, hY₂_in_sector, rfl⟩
-
   -- Define the target state Z by its coordinates, which are the convex combination.
   let Z_coord_val := a • (ss.state_equiv Y₁).val + b • (ss.state_equiv Y₂).val
   have hZ_in_space : Z_coord_val ∈ ss.space :=
     ss.isConvex (ss.state_equiv Y₁).property (ss.state_equiv Y₂).property ha hb hab
   let Z : TW.State Γ := ss.state_equiv.symm ⟨Z_coord_val, hZ_in_space⟩
-
-  -- Goal: Show `X ≺ Z`, which means `Z` is in the forward sector.
   have h_chain : X ≺ Z := by
-    -- Handle boundary cases `a=0` or `b=0` using case splits.
     by_cases ha0 : a = 0
-    ·
-      have b1 : b = 1 := by simpa [ha0] using hab
+    · have b1 : b = 1 := by simpa [ha0] using hab
       have Z_eq_Y₂ : Z = Y₂ := by
         apply ss.state_equiv.injective
         apply Subtype.ext
         simp [Z, Z_coord_val, ha0, b1]
       exact Z_eq_Y₂ ▸ hY₂_in_sector
-    ·
-      by_cases hb0 : b = 0
-      ·
-        have a1 : a = 1 := by simpa [hb0] using hab
+    · by_cases hb0 : b = 0
+      · have a1 : a = 1 := by simpa [hb0] using hab
         have Z_eq_Y₁ : Z = Y₁ := by
           apply ss.state_equiv.injective
           apply Subtype.ext
           simp [Z, Z_coord_val, a1, hb0]
         exact Z_eq_Y₁ ▸ hY₁_in_sector
-      ·
-        -- Main case: 0 < a < 1 (which implies 0 < b < 1).
+      · -- Main case: 0 < a < 1 (which implies 0 < b < 1).
         have ha_pos : 0 < a := lt_of_le_of_ne' ha ha0
         have hb_pos : 0 < b := lt_of_le_of_ne' hb hb0
         have ha_lt_1 : a < 1 := by
@@ -337,6 +335,5 @@ theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemF
             -- A7 is defined with `t`, here we use `a`.
             subst hb_eq
             exact SimpleSystemFamily.A7 h_in Y₁ Y₂ ha_bounds
-
   -- Conclude by showing the convex combination of coordinates is in the image of the forward sector.
   exact ⟨Z, h_chain, by simp [Z, Z_coord_val]; simp_all only [Equiv.apply_symm_apply, Z, ss, Z_coord_val]⟩
