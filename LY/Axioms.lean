@@ -7,6 +7,10 @@ Authors: Matteo Cipollina
 import Mathlib.Analysis.Normed.Order.Lattice
 import Mathlib.Analysis.RCLike.Basic
 import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Data.Nat.Basic
+import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Analysis.Convex.Basic
+import Mathlib.Analysis.Normed.Module.Basic
 
 /-!
 # The Axiomatic Framework of Lieb-Yngvason Thermodynamics
@@ -168,6 +172,13 @@ local notation:50 X " ≈ " Y => X ≺ Y ∧ Y ≺ X
 local infixr:70 " ⊗ " => TW.comp
 local infixr:80 " • " => TW.scale
 
+-- Provide a transitivity instance for the adiabatic accessibility relation
+instance calcTransThermoLe {Γ₁ Γ₂ Γ₃ : System} :
+  Trans (TW.le : TW.State Γ₁ → TW.State Γ₂ → Prop)
+        (TW.le : TW.State Γ₂ → TW.State Γ₃ → Prop)
+        (TW.le : TW.State Γ₁ → TW.State Γ₃ → Prop) where
+  trans := TW.A2
+
 -- Inhabited instance for the zero system state.
 instance instInhabitedZState (System : Type u) [TW : ThermoWorld System] :
     Inhabited (TW.State TW.ZSystem) :=
@@ -201,3 +212,131 @@ lemma le_of_le_equiv {Γ₁ Γ₂ Γ₃ : System} {X : TW.State Γ₁} {Y : TW.S
 lemma one_minus_ne_of_ht {t : ℝ} (ht : 0 < t ∧ t < 1) : 1 - t ≠ 0 := (sub_pos.mpr ht.2).ne'
 
 end LY
+
+namespace LY
+
+universe u v
+
+variable {System : Type u} [TW : ThermoWorld System]
+
+local infix:50 " ≺ " => TW.le
+local notation:50 X " ≈ " Y => X ≺ Y ∧ Y ≺ X
+local infixr:70 " ⊗ " => TW.comp
+local infixr:80 " • " => TW.scale
+
+abbrev SimpleSystemSpace (n : ℕ) := ℝ × (Fin n → ℝ)
+instance (n:ℕ) : AddCommGroup (SimpleSystemSpace n) := by infer_instance
+noncomputable instance (n:ℕ) : Module ℝ (SimpleSystemSpace n) := by infer_instance
+instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
+instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨(0, 0)⟩
+
+/--
+The `IsSimpleSystem` structure holds the data for a single simple system: its identification
+with a convex, open subset of a coordinate space. It contains no axioms itself.
+-/
+structure IsSimpleSystem (n : ℕ) (Γ : System) where
+  space : Set (SimpleSystemSpace n)
+  isOpen : IsOpen space
+  isConvex : Convex ℝ space
+  state_equiv : TW.State Γ ≃ space
+
+/--
+A `SimpleSystemFamily` is a collection of systems that are all simple systems of the
+same dimension `n`. This class contains the axioms (A7, S1) and the crucial coherence
+axioms that govern how simple systems behave under scaling and composition.
+-/
+class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
+  /-- Provides the `IsSimpleSystem` data structure for any system in the family. -/
+  get_ss_inst (Γ : System) (h_in : is_in_family Γ) : IsSimpleSystem n Γ
+  /-- The family is closed under positive scaling. -/
+  scale_family_closed {Γ} (h_in : is_in_family Γ) {t : ℝ} (ht : 0 < t) :
+    is_in_family (t • Γ)
+  /-- **Coherence of Scaling and Coordinates (CSS)**: The coordinate map of the scaled
+      system `t•Γ` applied to the abstractly scaled state `t•X` yields exactly the
+      scalar product of `t` and the coordinates of `X`. This is the essential bridge
+      between abstract system algebra and concrete coordinate vector algebra. -/
+  coord_of_scaled_state_eq_smul_coord {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) {t : ℝ} (ht : 0 < t) :
+    let ss_Γ := get_ss_inst Γ h_in
+    let ss_tΓ := get_ss_inst (t • Γ) (scale_family_closed h_in ht)
+    ss_tΓ.state_equiv (scale_state ht.ne' X) = t • (ss_Γ.state_equiv X).val
+  /-- **A7 (Convex Combination)**: The state formed by composing two scaled-down simple
+      systems is adiabatically accessible to the state corresponding to the convex
+      combination of their coordinates. -/
+  A7 {Γ} (h_in : is_in_family Γ) (X Y : TW.State Γ) {t : ℝ} (ht : 0 < t ∧ t < 1) :
+    let ss := get_ss_inst Γ h_in
+    let combo_state := comp_state (scale_state ht.1.ne' X, scale_state (sub_pos.mpr ht.2).ne' Y)
+    let target_coord_val := t • (ss.state_equiv X).val + (1-t) • (ss.state_equiv Y).val
+    have h_target_in_space : target_coord_val ∈ ss.space :=
+      ss.isConvex (ss.state_equiv X).property (ss.state_equiv Y).property (le_of_lt ht.1) (le_of_lt (sub_pos.mpr ht.2)) (by ring)
+    let target_state : TW.State Γ := ss.state_equiv.symm ⟨target_coord_val, h_target_in_space⟩
+    TW.le combo_state target_state
+  /-- **S1 (Irreversibility)**: For any state in a simple system, there exists another
+      state that is strictly adiabatically accessible from it. -/
+  S1 {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) :
+    ∃ Y : TW.State Γ, X ≺ Y ∧ ¬ (Y ≺ X)
+
+def ForwardSector {Γ} (X : TW.State Γ) : Set (TW.State Γ) := { Y | X ≺ Y }
+/-- **Theorem 2.6 (Forward sectors are convex)** - SOTA Version
+    If `Γ` is in a simple system family, the forward sector of any state `X ∈ Γ`
+    is a convex set in the coordinate representation.
+-/
+theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemFamily n is_in_family]
+    {Γ : System} (h_in : is_in_family Γ) (X : TW.State Γ) :
+    Convex ℝ (Set.image (fun Y => ((ssf.get_ss_inst Γ h_in).state_equiv Y).val) (ForwardSector X)) := by
+  -- Let `ss` be the simple system instance for `Γ`.
+  let ss := ssf.get_ss_inst Γ h_in
+  -- Use the definition of Convex: `∀ y₁ y₂, y₁ ∈ S → y₂ ∈ S → ∀ a b, a≥0,b≥0,a+b=1 → a•y₁+b•y₂ ∈ S`
+  intro y₁ hy₁ y₂ hy₂ a b ha hb hab
+  rcases hy₁ with ⟨Y₁, hY₁_in_sector, rfl⟩
+  rcases hy₂ with ⟨Y₂, hY₂_in_sector, rfl⟩
+
+  -- Define the target state Z by its coordinates, which are the convex combination.
+  let Z_coord_val := a • (ss.state_equiv Y₁).val + b • (ss.state_equiv Y₂).val
+  have hZ_in_space : Z_coord_val ∈ ss.space :=
+    ss.isConvex (ss.state_equiv Y₁).property (ss.state_equiv Y₂).property ha hb hab
+  let Z : TW.State Γ := ss.state_equiv.symm ⟨Z_coord_val, hZ_in_space⟩
+
+  -- Goal: Show `X ≺ Z`, which means `Z` is in the forward sector.
+  have h_chain : X ≺ Z := by
+    -- Handle boundary cases `a=0` or `b=0` using case splits.
+    by_cases ha0 : a = 0
+    ·
+      have b1 : b = 1 := by simpa [ha0] using hab
+      have Z_eq_Y₂ : Z = Y₂ := by
+        apply ss.state_equiv.injective
+        apply Subtype.ext
+        simp [Z, Z_coord_val, ha0, b1]
+      exact Z_eq_Y₂ ▸ hY₂_in_sector
+    ·
+      by_cases hb0 : b = 0
+      ·
+        have a1 : a = 1 := by simpa [hb0] using hab
+        have Z_eq_Y₁ : Z = Y₁ := by
+          apply ss.state_equiv.injective
+          apply Subtype.ext
+          simp [Z, Z_coord_val, a1, hb0]
+        exact Z_eq_Y₁ ▸ hY₁_in_sector
+      ·
+        -- Main case: 0 < a < 1 (which implies 0 < b < 1).
+        have ha_pos : 0 < a := lt_of_le_of_ne' ha ha0
+        have hb_pos : 0 < b := lt_of_le_of_ne' hb hb0
+        have ha_lt_1 : a < 1 := by
+          have := add_lt_add_left hb_pos a
+          -- a + 0 < a + b
+          simpa [hab] using this
+        have ha_bounds : 0 < a ∧ a < 1 := ⟨ha_pos, ha_lt_1⟩
+        have hb_eq : b = 1 - a := by linarith
+        -- The proof is a clear chain of reasoning using `calc`.
+        calc
+          X ≺ comp_state (scale_state ha_bounds.1.ne' X, scale_state (sub_pos.mpr ha_bounds.2).ne' X) :=
+            (TW.A5 X ha_bounds).1
+          _ ≺ comp_state (scale_state ha_bounds.1.ne' Y₁, scale_state (sub_pos.mpr ha_bounds.2).ne' Y₂) := by
+            exact TW.A3 (TW.A4 ha_bounds.1 hY₁_in_sector) (TW.A4 (sub_pos.mpr ha_bounds.2) hY₂_in_sector)
+          _ ≺ Z := by
+            -- The final step is Axiom A7. We just need to show the states match.
+            -- A7 is defined with `t`, here we use `a`.
+            subst hb_eq
+            exact SimpleSystemFamily.A7 h_in Y₁ Y₂ ha_bounds
+
+  -- Conclude by showing the convex combination of coordinates is in the image of the forward sector.
+  exact ⟨Z, h_chain, by simp [Z, Z_coord_val]; simp_all only [Equiv.apply_symm_apply, Z, ss, Z_coord_val]⟩
