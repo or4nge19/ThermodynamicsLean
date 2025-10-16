@@ -282,7 +282,7 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
     ∃ Y : TW.State Γ, X ≺ Y ∧ ¬ (Y ≺ X)
 
 def ForwardSector {Γ} (X : TW.State Γ) : Set (TW.State Γ) := { Y | X ≺ Y }
-/-- **Theorem 2.6 (Forward sectors are convex)** - SOTA Version
+/-- **Theorem 2.6 (Forward sectors are convex)** -
     If `Γ` is in a simple system family, the forward sector of any state `X ∈ Γ`
     is a convex set in the coordinate representation.
 -/
