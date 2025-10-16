@@ -320,18 +320,15 @@ theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemF
         have hb_pos : 0 < b := lt_of_le_of_ne' hb hb0
         have ha_lt_1 : a < 1 := by
           have := add_lt_add_left hb_pos a
-          -- a + 0 < a + b
           simpa [hab] using this
         have ha_bounds : 0 < a ∧ a < 1 := ⟨ha_pos, ha_lt_1⟩
         have hb_eq : b = 1 - a := by linarith
-        -- The proof is a clear chain of reasoning using `calc`.
         calc
           X ≺ comp_state (scale_state ha_bounds.1.ne' X, scale_state (sub_pos.mpr ha_bounds.2).ne' X) :=
             (TW.A5 X ha_bounds).1
           _ ≺ comp_state (scale_state ha_bounds.1.ne' Y₁, scale_state (sub_pos.mpr ha_bounds.2).ne' Y₂) := by
             exact TW.A3 (TW.A4 ha_bounds.1 hY₁_in_sector) (TW.A4 (sub_pos.mpr ha_bounds.2) hY₂_in_sector)
           _ ≺ Z := by
-            -- The final step is Axiom A7. We just need to show the states match.
             -- A7 is defined with `t`, here we use `a`.
             subst hb_eq
             exact SimpleSystemFamily.A7 h_in Y₁ Y₂ ha_bounds
