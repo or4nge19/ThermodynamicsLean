@@ -102,7 +102,7 @@ noncomputable def S_of (ε' : ℝ) {ΓX ΓY ΓZ}
   (ha : 0 ≤ a) (hb : 0 ≤ b) (hc : 0 ≤ c) :=
   tripleR (gscale_state ha X) (gscale_state hb Y) (gscale_state hc Z)
 
-/-- The core step of the chain argument: S(k) ≺ S(k+1).
+/-- The main step of the chain argument: S(k) ≺ S(k+1).
     This proof relies heavily on algebraic reorganization (CA, CC) and generalized recombination. -/
 lemma S_step
   {ΓX ΓY ΓZ} (X : TW.State ΓX) (Y : TW.State ΓY) (Z : TW.State ΓZ)

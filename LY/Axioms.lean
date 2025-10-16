@@ -7,6 +7,10 @@ Authors: Matteo Cipollina
 import Mathlib.Analysis.Normed.Order.Lattice
 import Mathlib.Analysis.RCLike.Basic
 import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Data.Nat.Basic
+import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Analysis.Convex.Basic
+import Mathlib.Analysis.Normed.Module.Basic
 
 /-!
 # The Axiomatic Framework of Lieb-Yngvason Thermodynamics
@@ -199,5 +203,178 @@ lemma le_of_le_equiv {Γ₁ Γ₂ Γ₃ : System} {X : TW.State Γ₁} {Y : TW.S
     (h : X ≺ Y) (h' : Y ≈ Z) : X ≺ Z := thermo_le_trans h h'.1
 
 lemma one_minus_ne_of_ht {t : ℝ} (ht : 0 < t ∧ t < 1) : 1 - t ≠ 0 := (sub_pos.mpr ht.2).ne'
+
+/-- Coordinate model for simple systems. -/
+abbrev SimpleSystemSpace (n : ℕ) := ℝ × (Fin n → ℝ)
+
+/-! Instances for the coordinate space. -/
+instance instAddCommGroupSimpleSystemSpace (n : ℕ) :
+    AddCommGroup (SimpleSystemSpace n) := by
+  dsimp [SimpleSystemSpace]; infer_instance
+
+noncomputable instance instModuleSimpleSystemSpace (n : ℕ) :
+    Module ℝ (SimpleSystemSpace n) := by
+  dsimp [SimpleSystemSpace]; infer_instance
+
+instance instTopologicalSpaceSimpleSystemSpace (n : ℕ) :
+    TopologicalSpace (SimpleSystemSpace n) := by
+  dsimp [SimpleSystemSpace]; infer_instance
+
+instance (n : ℕ) : Inhabited (SimpleSystemSpace n) := ⟨(0, 0)⟩
+
+/-- The class `IsSimpleSystem` asserts that a system `Γ` has the structure of a
+    simple system with `n` work coordinates. It contains the axioms specific to
+    simple systems, including A7, S1, S2, and S3.
+-/
+class IsSimpleSystem {System : Type u} [TW : ThermoWorld System] (n : ℕ) (Γ : System) where
+  space : Set (SimpleSystemSpace n)
+  isOpen : IsOpen space
+  isConvex : Convex ℝ space
+  state_equiv : TW.State Γ ≃ { p : SimpleSystemSpace n // p ∈ space }
+  /-- Coherence of convex splitting: the composition of scaled simple systems equals the original system. -/
+  comp_scale_split {t : ℝ} (ht : 0 < t ∧ t < 1) :
+    TW.comp (TW.scale t Γ) (TW.scale (1 - t) Γ) = Γ
+
+  /-- Coherence Axiom: abstract scaling corresponds to coordinate smul (axiomatic).
+  TODO derive it as theorem from a concrete simple system -/
+  scale_is_smul_equiv (X : TW.State Γ) {t : ℝ} (ht : 0 < t) :
+    let tX_abstract := scale_state ht.ne' X
+    let X_coord := state_equiv X
+    let tX_coord_val : SimpleSystemSpace n := t • (X_coord : SimpleSystemSpace n)
+    -- We postulate existence of the scaled coordinate inside the simple system space.
+    ∃ (h_in_space : tX_coord_val ∈ space),
+      let tX_concrete := state_equiv.symm ⟨tX_coord_val, h_in_space⟩
+      -- Transport the concrete (in-Γ) representative to t•Γ via the scale equivalence.
+      let tX_concrete_scaled := (TW.state_of_scale_equiv ht.ne').symm tX_concrete
+      (TW.le (Γ₁ := TW.scale t Γ) (Γ₂ := TW.scale t Γ) tX_abstract tX_concrete_scaled) ∧
+      (TW.le (Γ₁ := TW.scale t Γ) (Γ₂ := TW.scale t Γ) tX_concrete_scaled tX_abstract)
+
+  /-- A7 (Concavity): convex combination yields adiabatic accessibility. -/
+  A7 (X Y : TW.State Γ) {t : ℝ} (ht : 0 < t ∧ t < 1)
+     (ha : 0 ≤ t) (hb : 0 ≤ 1 - t) (hab : t + (1 - t) = 1) :
+    let X_coord := state_equiv X
+    let Y_coord := state_equiv Y
+    let tX := scale_state ht.1.ne' X
+    let one_minus_t_Y := scale_state (sub_pos.mpr ht.2).ne' Y
+    let combo_state := comp_state (tX, one_minus_t_Y)
+    let target_coord := t • (X_coord : SimpleSystemSpace n) + (1 - t) • (Y_coord : SimpleSystemSpace n)
+    let h_target_in_space := isConvex X_coord.property Y_coord.property ha hb hab
+    let target_state_orig := state_equiv.symm ⟨target_coord, h_target_in_space⟩
+    let h_eq := comp_scale_split ht
+    let target_state := (Equiv.cast (congrArg TW.State h_eq).symm) target_state_orig
+    (@TW.le
+      (TW.comp (TW.scale t Γ) (TW.scale (1 - t) Γ))
+      (TW.comp (TW.scale t Γ) (TW.scale (1 - t) Γ))
+      combo_state target_state)
+
+  -- Explicit systems in `le` to avoid inference ambiguity.
+  S1 (X : TW.State Γ) :
+    ∃ Y : TW.State Γ,
+      (TW.le (Γ₁ := Γ) (Γ₂ := Γ) X Y) ∧
+      ¬ (TW.le (Γ₁ := Γ) (Γ₂ := Γ) Y X)
+local notation:50 X " ≺≺ " Y => X ≺ Y ∧ ¬ (Y ≺ X)
+
+def ForwardSector {Γ Γ' : System} (X : TW.State Γ) : Set (TW.State Γ') :=
+  { Y : TW.State Γ' | X ≺ Y }
+
+/-- **Theorem 2.6 (Forward sectors are convex)** - Revised
+    If `Γ` is a simple system, the forward sector of any state `X ∈ Γ` within `Γ`
+    is a convex set (in the coordinate representation). -/
+theorem forward_sectors_are_convex {n : ℕ} {Γ : System} [ss : IsSimpleSystem n Γ] (X : TW.State Γ) :
+    Convex ℝ ((fun Y : TW.State Γ =>
+      ((ss.state_equiv Y : { p : SimpleSystemSpace n // p ∈ ss.space }) : SimpleSystemSpace n))
+        '' (ForwardSector X : Set (TW.State Γ))) := by
+  -- `Convex` in Mathlib uses coefficients `a b` with `a,b ≥ 0` and `a+b=1`.
+  intro y₁ hy₁ y₂ hy₂ a b ha hb hab
+  rcases hy₁ with ⟨Y₁, hY₁_in_sector, rfl⟩
+  rcases hy₂ with ⟨Y₂, hY₂_in_sector, rfl⟩
+  -- Shorthands for subtype points and their coordinate representatives.
+  set Y₁_sub := ss.state_equiv Y₁ with hY₁sub
+  set Y₂_sub := ss.state_equiv Y₂ with hY₂sub
+  have hY₁_in_space : (Y₁_sub : SimpleSystemSpace n) ∈ ss.space := Y₁_sub.property
+  have hY₂_in_space : (Y₂_sub : SimpleSystemSpace n) ∈ ss.space := Y₂_sub.property
+  -- The convex combination in coordinates.
+  let Z_coord_val : SimpleSystemSpace n :=
+    a • (Y₁_sub : SimpleSystemSpace n) + b • (Y₂_sub : SimpleSystemSpace n)
+  have hZ_in_space : Z_coord_val ∈ ss.space :=
+    ss.isConvex hY₁_in_space hY₂_in_space ha hb hab
+  -- Build the target state Z in Γ whose coordinates are Z_coord_val.
+  let Z : TW.State Γ := ss.state_equiv.symm ⟨Z_coord_val, hZ_in_space⟩
+  -- Show X ≺ Z by chaining A5, A3, A7 (handling edge cases a=0 or b=0).
+  -- First, derive useful equalities from a+b=1.
+  have hb_eq : b = 1 - a := by
+    have hba : b + a = 1 := by simpa [add_comm] using hab
+    exact eq_sub_of_add_eq' hab
+  have ha_le_1 : a ≤ 1 := by
+    have : 0 ≤ 1 - a := by simpa [hb_eq] using hb
+    simpa [sub_nonneg] using this
+  -- Prove X ≺ Z.
+  have h_chain : X ≺ Z := by
+    by_cases ha0 : a = 0
+    · -- Then b = 1, so Z reduces to Y₂.
+      have hb1 : b = 1 := by simpa [ha0] using hab
+      have hZ_eqY₂ : ss.state_equiv Z = Y₂_sub := by
+        apply Subtype.eq
+        simp [Z, Z_coord_val, ha0, hb1, zero_smul, one_smul, zero_add]
+      have Z_eq_Y₂ : Z = Y₂ := ss.state_equiv.injective hZ_eqY₂
+      simpa [Z_eq_Y₂] using hY₂_in_sector
+    · -- a ≠ 0
+      have ha_pos : 0 < a := lt_of_le_of_ne ha (Ne.symm ha0)
+      by_cases hb0 : b = 0
+      · -- Then a = 1 by a+b=1, so Z reduces to Y₁.
+        have ha1 : a = 1 := by
+          have := congrArg (fun t => t - b) hab
+          -- a + b = 1 ⇒ a = 1 - b = 1 - 0 = 1
+          simpa [add_comm, hb0] using this
+        have hZ_eqY₁ : ss.state_equiv Z = Y₁_sub := by
+          apply Subtype.eq
+          simp [Z, Z_coord_val, ha1, hb0, zero_smul, one_smul, add_zero]
+        have Z_eq_Y₁ : Z = Y₁ := ss.state_equiv.injective hZ_eqY₁
+        simpa [Z_eq_Y₁] using hY₁_in_sector
+      · -- Main case: 0 < a < 1 and 0 < b (since b = 1 - a).
+        have hb_pos : 0 < b := by
+          -- b = 1 - a and a < 1
+          have ha_ne1 : a ≠ 1 := by
+            intro h
+            have : b = 0 := by simp [hb_eq, h]
+            exact hb0 this
+          have : 0 < 1 - a := by
+            simpa [hb_eq] using lt_of_le_of_ne' hb hb0
+          exact lt_of_lt_of_eq this (id (Eq.symm hb_eq))
+        clear hb_pos
+        have hb_pos : 0 < b := by
+          exact lt_of_le_of_ne' hb hb0
+        have ha_ne1 : a ≠ 1 := by
+          intro h
+          have : b = 0 := by simp [hb_eq, h]
+          exact (ne_of_gt hb_pos) this
+        have ha_lt_1 : a < 1 := lt_of_le_of_ne ha_le_1 ha_ne1
+        have ht_bounds : 0 < a ∧ a < 1 := ⟨ha_pos, ha_lt_1⟩
+        -- 1. A5: X ≺ (a•X, (1-a)•X).
+        have h_split := (TW.A5 X ht_bounds).1
+        -- 2. A3 via A4 on each component: (a•X, (1-a)•X) ≺ (a•Y₁, (1-a)•Y₂).
+        have h_aX_aY₁   := TW.A4 ht_bounds.1 hY₁_in_sector
+        have h_1maX_1maY₂ := TW.A4 (by exact sub_pos.mpr ht_bounds.2) hY₂_in_sector
+        have h_consistency := TW.A3 h_aX_aY₁ h_1maX_1maY₂
+        -- 3. A7: (a•Y₁, (1-a)•Y₂) ≺ Z_casted in the composite system.
+        let h_eq := ss.comp_scale_split ht_bounds
+        let Z_casted : TW.State (TW.comp (TW.scale a Γ) (TW.scale (1 - a) Γ)) :=
+          Equiv.cast (congrArg TW.State h_eq).symm Z
+        have h_A7_applied :
+            comp_state (scale_state ht_bounds.1.ne' Y₁,
+                        scale_state (one_minus_ne_of_ht ht_bounds) Y₂) ≺ Z_casted := by
+          -- Match the let-terms in A7 to our Z_casted and parameters.
+          simpa [Z_casted, Z, Z_coord_val, hb_eq, h_eq] using
+            (ss.A7 (X := Y₁) (Y := Y₂) (t := a) ht_bounds
+              ha
+              (by simpa [hb_eq] using hb)
+              (by simp))
+        -- 4. Chain with Transitivity (A2) and remove the cast using coherence.
+        have h_chain1 := TW.A2 h_split (TW.A2 h_consistency h_A7_applied)
+        have h_coh : Z_casted ≺ Z := (TW.state_equiv_coherence (h_sys := h_eq.symm) Z).2
+        exact TW.A2 h_chain1 h_coh
+  -- Return the coordinates of Z, showing they're in the image under the coordinate map.
+  refine ⟨Z, h_chain, ?_⟩
+  simp [Z, Z_coord_val, hY₁sub, hY₂sub]
 
 end LY
