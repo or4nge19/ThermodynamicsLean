@@ -4,13 +4,10 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Matteo Cipollina
 -/
 
-import Mathlib.Analysis.Normed.Order.Lattice
-import Mathlib.Analysis.RCLike.Basic
-import Mathlib.Analysis.SpecificLimits.Basic
-import Mathlib.Data.Nat.Basic
-import Mathlib.Analysis.SpecificLimits.Basic
-import Mathlib.Analysis.Convex.Basic
-import Mathlib.Analysis.Normed.Module.Basic
+import Mathlib.Algebra.Lie.OfAssociative
+import Mathlib.Analysis.InnerProductSpace.PiL2
+
+open scoped RealInnerProductSpace
 
 /-!
 # The Axiomatic Framework of Lieb-Yngvason Thermodynamics
@@ -230,11 +227,13 @@ local notation:50 X " ≈ " Y => X ≺ Y ∧ Y ≺ X
 local infixr:70 " ⊗ " => TW.comp
 local infixr:80 " • " => TW.scale
 
-abbrev SimpleSystemSpace (n : ℕ) := ℝ × (Fin n → ℝ)
+abbrev SimpleSystemSpace (n : ℕ) := EuclideanSpace ℝ (Fin (n+1))
 instance (n:ℕ) : AddCommGroup (SimpleSystemSpace n) := by infer_instance
 noncomputable instance (n:ℕ) : Module ℝ (SimpleSystemSpace n) := by infer_instance
+--instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
 instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
-instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨(0, 0)⟩
+
+instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨0⟩
 
 /--
 The `IsSimpleSystem` structure holds the data for a single simple system: its identification
@@ -244,7 +243,7 @@ structure IsSimpleSystem (n : ℕ) (Γ : System) where
   space : Set (SimpleSystemSpace n)
   isOpen : IsOpen space
   isConvex : Convex ℝ space
-  state_equiv : TW.State Γ ≃ space
+  state_equiv : TW.State Γ ≃ Subtype space
 
 /--
 A `SimpleSystemFamily` is a collection of systems that are all simple systems of the
@@ -257,6 +256,7 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
   /-- The family is closed under positive scaling. -/
   scale_family_closed {Γ} (h_in : is_in_family Γ) {t : ℝ} (ht : 0 < t) :
     is_in_family (t • Γ)
+
   /-- **Coherence of Scaling and Coordinates (CSS)**: The coordinate map of the scaled
   system `t•Γ` applied to the abstractly scaled state `t•X` yields exactly the
   scalar product of `t` and the coordinates of `X`. This allows to connect abstract system
@@ -265,6 +265,7 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
     let ss_Γ := get_ss_inst Γ h_in
     let ss_tΓ := get_ss_inst (t • Γ) (scale_family_closed h_in ht)
     ss_tΓ.state_equiv (scale_state ht.ne' X) = t • (ss_Γ.state_equiv X).val
+
   /-- **A7 (Convex Combination)**: The state formed by composing two scaled-down simple
       systems is adiabatically accessible to the state corresponding to the convex
       combination of their coordinates. -/
@@ -276,16 +277,39 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
       ss.isConvex (ss.state_equiv X).property (ss.state_equiv Y).property (le_of_lt ht.1) (le_of_lt (sub_pos.mpr ht.2)) (by ring)
     let target_state : TW.State Γ := ss.state_equiv.symm ⟨target_coord_val, h_target_in_space⟩
     TW.le combo_state target_state
+
   /-- **S1 (Irreversibility)**: For any state in a simple system, there exists another
       state that is strictly adiabatically accessible from it. -/
   S1 {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) :
     ∃ Y : TW.State Γ, X ≺ Y ∧ ¬ (Y ≺ X)
+  pressure_map {Γ} (h_in : is_in_family Γ) : TW.State Γ → EuclideanSpace ℝ (Fin n)
+  S2_support_plane {Γ : System} (h_in : is_in_family Γ) (X Y : TW.State Γ) :
+    let ss := get_ss_inst Γ h_in
+    let P : EuclideanSpace ℝ (Fin n) := pressure_map h_in X
+    -- build a EuclideanSpace vector by converting `P` to a function and back
+    let normal : SimpleSystemSpace n :=
+      WithLp.toLp 2 (Fin.cons (1 : ℝ) (WithLp.ofLp P))
+    (X ≺ Y) ↔
+      (0 : ℝ) ≤ inner (𝕜 := ℝ) ((ss.state_equiv Y).val - (ss.state_equiv X).val) normal
+  /-- **S2 Coherence**: Adiabatically equivalent states have the same pressure map.
+      This ensures that the supporting hyperplanes for their forward sectors are parallel. -/
+  S2_Coherence {Γ} (h_in : is_in_family Γ) {X Y : TW.State Γ} (h_equiv : X ≈ Y) :
+    pressure_map h_in X = pressure_map h_in Y
+  /-- **S3 (Connectedness of the Boundary)**: the boundary of the forward sector is path connected. -/
+  S3_path_connected {Γ : System} (h_in : is_in_family Γ) (X : TW.State Γ) :
+    let ss : IsSimpleSystem n Γ := get_ss_inst Γ h_in
+    let coord_sector : Set (SimpleSystemSpace n) :=
+      Set.image (fun (Y : TW.State Γ) => (ss.state_equiv Y).val) { Y | X ≺ Y }
+    let boundary : Set (SimpleSystemSpace n) := frontier coord_sector
+    let adia_points : Set (SimpleSystemSpace n) :=
+      { p | p ∈ boundary ∧ ∃ Y : TW.State Γ, (ss.state_equiv Y).val = p ∧ X ≈ Y }
+    IsPathConnected adia_points
 
 def ForwardSector {Γ} (X : TW.State Γ) : Set (TW.State Γ) := { Y | X ≺ Y }
+
 /-- **Theorem 2.6 (Forward sectors are convex)** -
     If `Γ` is in a simple system family, the forward sector of any state `X ∈ Γ`
-    is a convex set in the coordinate representation.
--/
+    is a convex set in the coordinate representation. -/
 theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemFamily n is_in_family]
     {Γ : System} (h_in : is_in_family Γ) (X : TW.State Γ) :
     Convex ℝ (Set.image (fun Y => ((ssf.get_ss_inst Γ h_in).state_equiv Y).val) (ForwardSector X)) := by
@@ -332,5 +356,87 @@ theorem forward_sectors_are_convex {n : ℕ} {is_in_family} [ssf : SimpleSystemF
             -- A7 is defined with `t`, here we use `a`.
             subst hb_eq
             exact SimpleSystemFamily.A7 h_in Y₁ Y₂ ha_bounds
-  -- Conclude by showing the convex combination of coordinates is in the image of the forward sector.
   exact ⟨Z, h_chain, by simp [Z, Z_coord_val]; simp_all only [Equiv.apply_symm_apply, Z, ss, Z_coord_val]⟩
+
+variable {n : ℕ} {is_in_family : System → Prop} [ssf : SimpleSystemFamily n is_in_family]
+
+/-! ### Topological and Convex Geometry Lemmas -/
+
+section TopologicalLemmas
+open Convex
+variable {E : Type*} [NormedAddCommGroup E]
+
+/-- A cluster point of a set contained in a closed set must be in that closed set. -/
+lemma clusterPt_subset_of_subset_isClosed {s t : Set E} {x : E}
+    (hs : s ⊆ t) (ht : IsClosed t) (hx : ClusterPt x (Filter.principal s)) : x ∈ t := by
+  have hx_cl : x ∈ closure s := mem_closure_iff_clusterPt.mpr hx
+  exact (closure_minimal hs ht) hx_cl
+
+variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+
+/-- Points on an open line segment are in the interior of a convex set containing the endpoints. -/
+lemma openSegment_subset_interior_of_convex {s : Set E} (hs : Convex ℝ s)
+    {x y : E} (hx : x ∈ interior s) (hy : y ∈ s) (_ : x ≠ y) :
+    openSegment ℝ x y ⊆ interior s := by
+  exact Convex.openSegment_interior_self_subset_interior hs hx hy
+
+/-- Convex combination of interior point and boundary point stays in interior (except endpoint). -/
+lemma convex_combo_interior_mem {s : Set E} (hs : Convex ℝ s)
+    {x y : E} (hx : x ∈ interior s) (hy : y ∈ s) {t : ℝ} (ht : 0 < t ∧ t < 1) :
+    (1 - t) • x + t • y ∈ interior s := by
+  have hz_seg : (1 - t) • x + t • y ∈ openSegment ℝ x y := by
+    rw [openSegment_eq_image]
+    refine ⟨t, ht, rfl⟩
+  by_cases hxy : x = y
+  · subst hxy
+    simp_all only [openSegment_same, Set.mem_singleton_iff]
+  exact (openSegment_subset_interior_of_convex hs hx hy hxy) hz_seg
+
+end TopologicalLemmas
+
+/-! ### Convex Set Properties in Euclidean Space -/
+
+section ConvexSetProperties
+
+variable {n : ℕ}
+
+/-- A convex set in finite-dimensional Euclidean space with nonempty interior has
+    interior equal to the set minus its boundary. -/
+lemma interior_eq_self_diff_frontier_of_convex {s : Set (SimpleSystemSpace n)}
+    (_ : Convex ℝ s) (_ : (interior s).Nonempty) :
+    interior s = s \ frontier s := by
+  simp [self_diff_frontier]
+
+/-- In a normed space, if a set contains a ball and is contained in a larger ball,
+    then its interior is nonempty. -/
+lemma interior_nonempty_of_ball_subset {E : Type*} [NormedAddCommGroup E]
+    [InnerProductSpace ℝ E] [FiniteDimensional ℝ E] {s : Set E} {x : E} {r : ℝ}
+    (hr : 0 < r) (h : Metric.ball x r ⊆ s) : (interior s).Nonempty := by
+  use x
+  rw [mem_interior_iff_mem_nhds]
+  exact Filter.mem_of_superset (Metric.ball_mem_nhds x hr) h
+
+/-- A convex set in a finite-dimensional space that contains a ball has nonempty interior. -/
+lemma convex_has_interior_of_ball {s : Set (SimpleSystemSpace n)}
+    (_ : Convex ℝ s) {x : SimpleSystemSpace n} {r : ℝ} (hr : 0 < r)
+    (hball : Metric.ball x r ⊆ s) : (interior s).Nonempty :=
+  interior_nonempty_of_ball_subset (E := SimpleSystemSpace n) hr hball
+
+end ConvexSetProperties
+
+/-- Build a state from a coordinate point in the simple-system space. -/
+def state_of_coord {n : ℕ} {is_in_family : System → Prop} [ssf : SimpleSystemFamily n is_in_family]
+    {Γ : System} (h_in : is_in_family Γ)
+    (y : SimpleSystemSpace n)
+    (hy : y ∈ (ssf.get_ss_inst Γ h_in).space) : TW.State Γ :=
+  (ssf.get_ss_inst Γ h_in).state_equiv.symm ⟨y, hy⟩
+
+@[simp] lemma state_of_coord_val {n : ℕ} {is_in_family : System → Prop} [ssf : SimpleSystemFamily n is_in_family]
+    {Γ : System} (h_in : is_in_family Γ)
+    (y : SimpleSystemSpace n)
+    (hy : y ∈ (ssf.get_ss_inst Γ h_in).space) :
+    ((ssf.get_ss_inst Γ h_in).state_equiv (state_of_coord (System := System) h_in y hy)).val = y := by
+  dsimp [state_of_coord]
+  simp
+
+end LY
