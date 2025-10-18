@@ -234,21 +234,22 @@ instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
 
 instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨0⟩
 
-/--
-The `IsSimpleSystem` structure holds the data for a single simple system: its identification
-with a convex, open subset of a coordinate space. It contains no axioms itself.
--/
+/-- The `IsSimpleSystem` structure holds the data for a single simple system: its identification
+with a convex, open subset of an `(n+1)`-dimensional coordinate space (`SimpleSystemSpace n`).
+It contains no axioms itself. -/
 structure IsSimpleSystem (n : ℕ) (Γ : System) where
   space : Set (SimpleSystemSpace n)
   isOpen : IsOpen space
   isConvex : Convex ℝ space
   state_equiv : TW.State Γ ≃ Subtype space
 
-/--
-A `SimpleSystemFamily` is a collection of systems that are all simple systems of the
-same dimension `n`. This class contains the axioms (A7, S1) and the coherence
-axioms that govern how simple systems behave under scaling and composition.
--/
+/-- A `SimpleSystemFamily` is a collection of systems whose states are identified with points
+in an `(n+1)`-dimensional coordinate space (`SimpleSystemSpace n`). The parameter `n`
+corresponds to the number of so-called "work coordinates".
+
+This class contains the axioms (A7, S1-S3) and the coherence axioms that govern
+how simple systems behave under scaling and composition within this coordinate-based
+framework. -/
 class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
   /-- Provides the `IsSimpleSystem` data structure for any system in the family. -/
   get_ss_inst (Γ : System) (h_in : is_in_family Γ) : IsSimpleSystem n Γ
