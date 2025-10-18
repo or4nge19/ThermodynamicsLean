@@ -230,7 +230,6 @@ local infixr:80 " • " => TW.scale
 abbrev SimpleSystemSpace (n : ℕ) := EuclideanSpace ℝ (Fin (n+1))
 instance (n:ℕ) : AddCommGroup (SimpleSystemSpace n) := by infer_instance
 noncomputable instance (n:ℕ) : Module ℝ (SimpleSystemSpace n) := by infer_instance
---instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
 instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
 
 instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨0⟩
