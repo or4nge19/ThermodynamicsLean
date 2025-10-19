@@ -7,6 +7,7 @@ Authors: Matteo Cipollina
 import Mathlib.Algebra.Lie.OfAssociative
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import LY.ForMathlib.TangentCone
+import Mathlib
 
 open scoped RealInnerProductSpace
 
@@ -491,3 +492,4 @@ def state_of_coord {n : ℕ} {is_in_family : System → Prop} [ssf : SimpleSyste
   simp
 
 end LY
+#min_imports
