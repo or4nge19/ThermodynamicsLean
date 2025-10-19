@@ -6,7 +6,7 @@ Authors: Matteo Cipollina
 
 import Mathlib.Algebra.Lie.OfAssociative
 import Mathlib.Analysis.InnerProductSpace.PiL2
-import LY.ForMathlibTangentCone
+import LY.ForMathlib.TangentCone
 
 open scoped RealInnerProductSpace
 
