@@ -6,6 +6,7 @@ Authors: Matteo Cipollina
 
 import Mathlib.Algebra.Lie.OfAssociative
 import Mathlib.Analysis.InnerProductSpace.PiL2
+import LY.TangentCone
 
 open scoped RealInnerProductSpace
 
@@ -203,7 +204,6 @@ lemma thermo_equiv_trans {Γ₁ Γ₂ Γ₃ : System} {X : TW.State Γ₁} {Y : 
     (h₁ : X ≈ Y) (h₂ : Y ≈ Z) : X ≈ Z :=
   ⟨thermo_le_trans h₁.1 h₂.1, thermo_le_trans h₂.2 h₁.2⟩
 
--- Alias for explicit typing when needed.
 lemma thermo_equiv_trans' {Γ₁ Γ₂ Γ₃ : System} {X : TW.State Γ₁} {Y : TW.State Γ₂} {Z : TW.State Γ₃}
     (h₁ : X ≈ Y) (h₂ : Y ≈ Z) : X ≈ Z := thermo_equiv_trans h₁ h₂
 
@@ -227,12 +227,28 @@ local notation:50 X " ≈ " Y => X ≺ Y ∧ Y ≺ X
 local infixr:70 " ⊗ " => TW.comp
 local infixr:80 " • " => TW.scale
 
+open InnerProductSpace RealInnerProductSpace
+
 abbrev SimpleSystemSpace (n : ℕ) := EuclideanSpace ℝ (Fin (n+1))
 instance (n:ℕ) : AddCommGroup (SimpleSystemSpace n) := by infer_instance
 noncomputable instance (n:ℕ) : Module ℝ (SimpleSystemSpace n) := by infer_instance
 instance (n:ℕ) : TopologicalSpace (SimpleSystemSpace n) := by infer_instance
 
 instance (n:ℕ) : Inhabited (SimpleSystemSpace n) := ⟨0⟩
+variable {n : ℕ}
+
+
+/-- The 1-dimensional subspace corresponding to the energy coordinate. -/
+def energy_subspace : Subspace ℝ (SimpleSystemSpace n) :=
+  ℝ ∙ (WithLp.toLp 2 (Fin.cons (1 : ℝ) (WithLp.ofLp (0 : EuclideanSpace ℝ (Fin n)))))
+
+/-- The n-dimensional subspace corresponding to the work coordinates. -/
+noncomputable def work_subspace : Subspace ℝ (SimpleSystemSpace n) := (energy_subspace).orthogonal
+
+/-- Forward sector A_X := { Y | X ≺ Y } -/
+def ForwardSector {Γ} (X : TW.State Γ) : Set (TW.State Γ) := { Y | X ≺ Y }
+
+-- The full S2 Axiom suite, to be placed inside the SimpleSystemFamily class.
 
 /-- The `IsSimpleSystem` structure holds the data for a single simple system: its identification
 with a convex, open subset of an `(n+1)`-dimensional coordinate space (`SimpleSystemSpace n`).
@@ -283,14 +299,51 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
   S1 {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) :
     ∃ Y : TW.State Γ, X ≺ Y ∧ ¬ (Y ≺ X)
   pressure_map {Γ} (h_in : is_in_family Γ) : TW.State Γ → EuclideanSpace ℝ (Fin n)
-  S2_support_plane {Γ : System} (h_in : is_in_family Γ) (X Y : TW.State Γ) :
+
+  /-- **S2.1 (Unique Tangent Plane):** For each state `X`, the forward sector `Aₓ` has a
+  unique supporting hyperplane `Πₓ` at `X`. This plane has a finite slope with respect
+  to the work coordinates (i.e., its normal vector is not purely a work vector). -/
+  S2_Unique_Tangent_Plane {Γ} (h_in : is_in_family Γ) (X : TW.State Γ) :
     let ss := get_ss_inst Γ h_in
-    let P : EuclideanSpace ℝ (Fin n) := pressure_map h_in X
-    -- build a EuclideanSpace vector by converting `P` to a function and back
-    let normal : SimpleSystemSpace n :=
-      WithLp.toLp 2 (Fin.cons (1 : ℝ) (WithLp.ofLp P))
-    (X ≺ Y) ↔
-      (0 : ℝ) ≤ inner (𝕜 := ℝ) ((ss.state_equiv Y).val - (ss.state_equiv X).val) normal
+    let C_X : Set (SimpleSystemSpace n) :=
+      Set.image (fun Y : TW.State Γ => (ss.state_equiv Y).val) (ForwardSector X)
+    let x_coord : SimpleSystemSpace n := (ss.state_equiv X).val
+    ∃! (f : (SimpleSystemSpace n) →L[ℝ] ℝ),
+      ‖f‖ = 1 ∧
+      (∀ y_coord ∈ C_X, f y_coord ≤ f x_coord) ∧
+      -- finite slope: the normal is not orthogonal to the energy direction
+      (let u : SimpleSystemSpace n :=
+          (InnerProductSpace.toDual ℝ (SimpleSystemSpace n)).symm f
+       let eE : SimpleSystemSpace n :=
+          WithLp.toLp 2 (Fin.cons (1 : ℝ) (WithLp.ofLp (0 : EuclideanSpace ℝ (Fin n))))
+       ⟪u, eE⟫_ℝ ≠ 0)
+
+  /-- **S2.2 (Lipschitz Pressure):** The pressure `P(X)` is locally Lipschitz in coordinates. -/
+  S2_Lipschitz_Pressure {Γ} (h_in : is_in_family Γ) :
+    let ss := get_ss_inst Γ h_in
+    -- Define P on the ambient space; only its restriction to ss.space matters.
+    let P : SimpleSystemSpace n → SimpleSystemSpace n :=
+      by
+        classical
+        -- total function on the ambient space; use by_cases for membership
+        intro x
+        by_cases hx : x ∈ ss.space
+        · -- state corresponding to coordinates x
+          let X : TW.State Γ := ss.state_equiv.symm ⟨x, hx⟩
+          -- extract a supporting functional at X from S2 via classical choice
+          let ex := S2_Unique_Tangent_Plane (Γ := Γ) h_in X
+          let f : (SimpleSystemSpace n) →L[ℝ] ℝ := Classical.choose ex.exists
+          -- normal vector and energy/work decomposition
+          let u : SimpleSystemSpace n :=
+            (InnerProductSpace.toDual ℝ (SimpleSystemSpace n)).symm f
+          let eE : SimpleSystemSpace n :=
+            WithLp.toLp 2 (Fin.cons (1 : ℝ) (WithLp.ofLp (0 : EuclideanSpace ℝ (Fin n))))
+          let u_E : ℝ := ⟪u, eE⟫_ℝ
+          let u_W : SimpleSystemSpace n := (work_subspace (n := n)).starProjection u
+          -- define P(x)
+          exact (-1 / u_E) • u_W
+        · exact 0
+    LocallyLipschitzOn ss.space P
   /-- **S2 Coherence**: Adiabatically equivalent states have the same pressure map.
       This ensures that the supporting hyperplanes for their forward sectors are parallel. -/
   S2_Coherence {Γ} (h_in : is_in_family Γ) {X Y : TW.State Γ} (h_equiv : X ≈ Y) :
@@ -304,8 +357,6 @@ class SimpleSystemFamily (n : ℕ) (is_in_family : System → Prop) where
     let adia_points : Set (SimpleSystemSpace n) :=
       { p | p ∈ boundary ∧ ∃ Y : TW.State Γ, (ss.state_equiv Y).val = p ∧ X ≈ Y }
     IsPathConnected adia_points
-
-def ForwardSector {Γ} (X : TW.State Γ) : Set (TW.State Γ) := { Y | X ≺ Y }
 
 /-- **Theorem 2.6 (Forward sectors are convex)** -
     If `Γ` is in a simple system family, the forward sector of any state `X ∈ Γ`
