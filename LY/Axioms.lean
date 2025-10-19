@@ -4,10 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Matteo Cipollina
 -/
 
-import Mathlib.Algebra.Lie.OfAssociative
+import Mathlib.Analysis.InnerProductSpace.Dual
 import Mathlib.Analysis.InnerProductSpace.PiL2
-import LY.ForMathlib.TangentCone
-import Mathlib
 
 open scoped RealInnerProductSpace
 
@@ -492,4 +490,3 @@ def state_of_coord {n : ℕ} {is_in_family : System → Prop} [ssf : SimpleSyste
   simp
 
 end LY
-#min_imports
