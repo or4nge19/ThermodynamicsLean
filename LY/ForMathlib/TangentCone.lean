@@ -1,15 +1,11 @@
+import Mathlib.Algebra.Lie.OfAssociative
 import Mathlib.Algebra.Order.Ring.Star
 import Mathlib.Analysis.Calculus.LocalExtr.Basic
-import Mathlib.Analysis.InnerProductSpace.Continuous
+import Mathlib.Analysis.Convex.Cone.InnerDual
 import Mathlib.Analysis.Normed.Affine.AddTorsorBases
-import Mathlib.Analysis.Normed.Group.Quotient
-import Mathlib.Analysis.Normed.Lp.WithLp
-import Mathlib.Analysis.RCLike.Lemmas
+import Mathlib.LinearAlgebra.Dual.Lemmas
 import Mathlib.LinearAlgebra.FreeModule.PID
-import Mathlib.LinearAlgebra.Matrix.FiniteDimensional
 import Mathlib.Order.CompletePartialOrder
-import Mathlib.RingTheory.Henselian
-import Mathlib.RingTheory.PicardGroup
 import Mathlib.RingTheory.SimpleRing.Principal
 import Mathlib.Topology.GDelta.MetrizableSpace
 
@@ -804,49 +800,328 @@ lemma exists_affine_hyperplane_of_nonempty_of_interior_empty
     exact hquot_one
   refine ⟨H, hH_closed, h_codim_one, hs_sub_H⟩
 
--- Small helper: frontier points are not in the interior
+-- Frontier points are not in the interior
 lemma not_mem_interior_of_mem_frontier {E : Type*} [TopologicalSpace E] {s : Set E} {z : E}
     (hz : z ∈ frontier s) : z ∉ interior s := by
   have hz' : z ∈ closure s \ interior s := by simp_all only [closure_diff_interior]
   exact hz'.2
 
+open Set Filter Topology InnerProductSpace RealInnerProductSpace
+open scoped Topology
+
+variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
+
+/-- Every set is contained in its double inner dual. -/
+lemma subset_innerDual_innerDual (S : Set E) :
+    S ⊆ ((ProperCone.innerDual ((ProperCone.innerDual S : Set E)) : ProperCone ℝ E) : Set E) := by
+  intro y hy
+  change ∀ x ∈ ((ProperCone.innerDual S : ProperCone ℝ E) : Set E), 0 ≤ ⟪x, y⟫_ℝ
+  intro x hx
+  have : 0 ≤ ⟪y, x⟫_ℝ := (ProperCone.mem_innerDual.mp hx) hy
+  simpa [real_inner_comm] using this
+
+/-- The cone of rays from `z` to `s` sits inside its double inner dual. -/
+lemma rayCone_subset_doubleDual (s : Set E) (z : E) :
+    {d : E | ∃ y ∈ s, ∃ t : ℝ, 0 ≤ t ∧ d = t • (y - z)}
+      ⊆ ((ProperCone.innerDual
+            ((ProperCone.innerDual {d : E | ∃ y ∈ s, ∃ t : ℝ, 0 ≤ t ∧ d = t • (y - z)} : Set E))
+          : ProperCone ℝ E) : Set E) := by
+  simpa using
+    (subset_innerDual_innerDual
+      (S := {d : E | ∃ y ∈ s, ∃ t : ℝ, 0 ≤ t ∧ d = t • (y - z)}))
+
+
 open Set AffineSubspace
-open scoped InnerProductSpace RealInnerProductSpace
+open Set Filter Topology InnerProductSpace RealInnerProductSpace
+open scoped Topology
 
-variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] [FiniteDimensional ℝ E]
+variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteSpace E]
 
-/-- Supporting hyperplane theorem at a boundary point of a closed convex set.
-Given a closed convex set `s`, a point `z ∈ s` which is not in the interior of `s`,
-there exists a nonzero continuous linear functional `g` supporting `s` at `z`, i.e.
-`∀ y ∈ s, g y ≤ g z`. -/
-lemma exists_supporting_hyperplane_of_closed_convex
-    {s : Set E} (hs_closed : IsClosed s) (hs_conv : Convex ℝ s)
-    {z : E} (hz_in_s : z ∈ s) (hz_not_int : z ∉ interior s) :
-    ∃ g : E →L[ℝ] ℝ, g ≠ 0 ∧ ∀ y ∈ s, g y ≤ g z := by sorry
+/-- Supporting vector at a boundary point of a closed convex set when `interior s` is nonempty. -/
+theorem exists_supporting_hyperplane_of_closed_convex_of_nonempty_interior
+  {s : Set E} (hs_conv : Convex ℝ s) (_hs_closed : IsClosed s)
+  {z : E} (_ : z ∈ s) (hz_not_int : z ∉ interior s)
+  (hInt : (interior s).Nonempty) :
+  ∃ v : E, v ≠ 0 ∧ ∀ y ∈ s, ⟪y - z, v⟫ ≤ 0 := by
+  classical
+  -- interior s is open convex, z ∉ interior s
+  have h_int_open : IsOpen (interior s) := isOpen_interior
+  have h_int_conv : Convex ℝ (interior s) := hs_conv.interior
+  -- Separate z from interior s: ∃ f₀ with f₀ z < f₀ x for all x ∈ interior s
+  obtain ⟨f₀, hlt₀⟩ :=
+    geometric_hahn_banach_point_open (ht₁ := h_int_conv) (ht₂ := h_int_open) (disj := hz_not_int)
+  -- Flip the sign so that we get g x < g z for interior points x
+  let g : E →L[ℝ] ℝ := -f₀
+  -- g ≠ 0 since there is strict inequality at some interior point
+  obtain ⟨x₀, hx₀⟩ := hInt
+  have hg_ne : g ≠ 0 := by
+    have hx_lt : g x₀ < g z := by
+      have h := hlt₀ x₀ hx₀
+      simpa [g] using (neg_lt_neg_iff.mpr h)
+    intro hg
+    have H : (0 : ℝ) < 0 := by
+      simp [hg] at hx_lt
+    simpa using H.false
+  -- Riesz representation v with g x = ⟪x, v⟫
+  let v : E := (InnerProductSpace.toDual ℝ E).symm g
+  have hv_ne : v ≠ 0 := by
+    intro hv
+    -- (toDual v) = 0 → g = 0 via apply_symm_apply
+    have hmap : (InnerProductSpace.toDual ℝ E) v = 0 :=
+      (InnerProductSpace.toDual ℝ E).map_eq_zero_iff.mpr hv
+    have hTo : (InnerProductSpace.toDual ℝ E) v = g := by
+      simp [v]
+    exact hg_ne (by simpa [hTo] using hmap)
+  -- For any y ∈ s, build points in interior s approaching y, and pass to the limit
+  have h_le_all : ∀ y ∈ s, g y ≤ g z := by
+    intro y hy
+    -- openSegment y x₀ ⊆ interior s for convex s with x₀ ∈ interior s and y ∈ s
+    have hopenSeg : openSegment ℝ y x₀ ⊆ interior s :=
+      Convex.openSegment_self_interior_subset_interior hs_conv hy hx₀
+    --  hs_conv.openSegment_subset_interior hy hx₀
+    -- Take tₙ = (n+2)⁻¹ → 0; pₙ := (1 - tₙ) y + tₙ x₀ ∈ interior s
+    let t : ℕ → ℝ := fun n => (n + 2 : ℝ)⁻¹
+    have ht_pos : ∀ n, 0 < t n := by
+      intro n
+      have : 0 < (n : ℝ) + 2 := by
+        exact add_pos_of_nonneg_of_pos (by exact_mod_cast Nat.cast_nonneg n) (by norm_num)
+      simpa [t, add_comm, add_left_comm, add_assoc] using inv_pos.mpr this
+    have ht_lt_one : ∀ n, t n < (1 : ℝ) := by
+      intro n
+      -- 2 ≤ n+2 ⇒ (n+2)⁻¹ ≤ 1/2 < 1
+      have hn2 : (2 : ℝ) ≤ (n : ℝ) + 2 := by
+        have : (0 : ℝ) ≤ (n : ℝ) := by exact_mod_cast Nat.cast_nonneg n
+        linarith
+      have hle : t n ≤ (1 / 2 : ℝ) := by
+        have hpos2 : 0 < (2 : ℝ) := by norm_num
+        simpa [t, add_comm, add_left_comm, add_assoc] using
+          (one_div_le_one_div_of_le hpos2 hn2)
+      exact lt_of_le_of_lt hle (by norm_num : (1 / 2 : ℝ) < 1)
+    have hp_mem : ∀ n, ((1 - t n) • y + t n • x₀) ∈ interior s := by
+      intro n
+      have : (1 - t n) • y + t n • x₀ ∈ openSegment ℝ y x₀ := by
+        -- openSegment ℝ y x₀ = {a • y + b • x₀ | 0 < a ∧ 0 < b ∧ a + b = 1}
+        refine ⟨1 - t n, t n, ?_, ?_, ?_, rfl⟩
+        · exact sub_pos.mpr (ht_lt_one n)
+        · exact ht_pos n
+        · have : 1 - t n + t n = (1 : ℝ) := by
+            simp [sub_eq_add_neg]
+          simp [add_comm]
+      exact hopenSeg this
+    -- pₙ → y
+    have htendsto0 : Tendsto t atTop (𝓝 0) := by
+      -- (n ↦ n+2) tends to atTop; compose with inverse tends to 0
+      have h2 : Tendsto (fun n : ℕ => n + 2) atTop atTop :=
+        tendsto_atTop_atTop_of_monotone
+          (f := fun n : ℕ => n + 2)
+          (by
+            intro a b h; exact add_le_add_right h 2)
+          (by
+            intro b; exact ⟨b, Nat.le_add_right _ _⟩)
+      have hcomp :
+          (fun n : ℕ => (↑n + 2 : ℝ)⁻¹)
+            = ((fun n : ℕ => (↑n : ℝ)⁻¹) ∘ fun n : ℕ => n + 2) := by
+        funext n; simp [Function.comp, Nat.cast_add, Nat.cast_ofNat]
+      simpa [t, hcomp] using (tendsto_inverse_atTop_nhds_zero_nat.comp h2)
+    have h_tendsto_y :
+        Tendsto (fun n : ℕ => (1 - t n) • y + t n • x₀) atTop (𝓝 y) := by
+      have h1 : Tendsto t atTop (𝓝 0) := htendsto0
+      have h2 : Tendsto (fun n : ℕ => 1 - t n) atTop (𝓝 1) := by
+        simpa using (tendsto_const_nhds.sub h1)
+      have hA :
+          Tendsto (fun n : ℕ => (1 - t n) • y) atTop (𝓝 ((1 : ℝ) • y)) := by
+        simpa using
+          (h2.smul (tendsto_const_nhds : Tendsto (fun _ : ℕ => y) atTop (𝓝 y)))
+      have hB :
+          Tendsto (fun n : ℕ => t n • x₀) atTop (𝓝 (0 : E)) := by
+        have h :=
+          (h1.smul (tendsto_const_nhds : Tendsto (fun _ : ℕ => (x₀ : E)) atTop (𝓝 (x₀ : E))))
+        simpa [zero_smul] using
+          (h :
+            Tendsto (fun n : ℕ => (t n : ℝ) • (x₀ : E)) atTop (𝓝 ((0 : ℝ) • (x₀ : E))))
+      have hsum :
+          Tendsto (fun n : ℕ => (1 - t n) • y + t n • x₀) atTop
+            (𝓝 (((1 : ℝ) • y) + (0 : E))) := by
+        simpa using hA.add hB
+      simpa [one_smul, zero_smul, add_zero] using hsum
+    -- Strict inequality on interior points, then pass to the limit
+    have h_ev_lt : ∀ᶠ n in atTop, g ((1 - t n) • y + t n • x₀) < g z := by
+      refine Filter.Eventually.of_forall (fun n => ?_)
+      have hsep := hlt₀ _ (hp_mem n)
+      simpa [g] using (neg_lt_neg_iff.mpr hsep)
+    have h_ev_le : ∀ᶠ n in atTop, g ((1 - t n) • y + t n • x₀) ≤ g z :=
+      h_ev_lt.mono (fun _ hn => le_of_lt hn)
+    have hg_tendsto : Tendsto (fun n => g ((1 - t n) • y + t n • x₀)) atTop (𝓝 (g y)) :=
+      (g.continuous.tendsto _).comp h_tendsto_y
+    exact le_of_tendsto_of_tendsto hg_tendsto tendsto_const_nhds h_ev_le
+  -- Turn into inner-product inequality via Riesz
+  refine ⟨v, hv_ne, ?_⟩
+  intro y hy
+  have hv_eq : (InnerProductSpace.toDual ℝ E) v = g := by
+    simp [v]
+  have hv_repr : ∀ x, g x = ⟪x, v⟫ := by
+    intro x
+    have hx : g x = ((InnerProductSpace.toDual ℝ E) v) x := by
+      simpa using congrArg (fun f : E →L[ℝ] ℝ => f x) hv_eq.symm
+    simpa [InnerProductSpace.toDual_apply, real_inner_comm] using hx
+  -- g (y - z) ≤ 0, hence ⟪y - z, v⟫ ≤ 0
+  have : g (y - z) ≤ 0 := by
+    have : g y ≤ g z := h_le_all y hy
+    simpa [map_sub] using sub_nonpos.mpr this
+  simpa [hv_repr] using this
 
-/-- Wrapper around Mathlib's supporting hyperplane theorem with the argument order
-    used in this file. Given a closed convex set `s`, a boundary point `z ∈ s \ interior s`,
-    there exists a nonzero continuous linear functional `g` supporting `s` at `z`. -/
-lemma exists_supporting_hyperplane_closed_convex
+/-- Classical supporting hyperplane theorem in finite-dimensional real inner product spaces. -/
+theorem exists_supporting_hyperplane_of_closed_convex_finiteDimensional
+  [FiniteDimensional ℝ E]
+  {s : Set E} (hs_conv : Convex ℝ s) (hs_closed : IsClosed s)
+  {z : E} (hz_mem : z ∈ s) (hz_not_int : z ∉ interior s) :
+  ∃ v : E, v ≠ 0 ∧ ∀ y ∈ s, ⟪y - z, v⟫ ≤ 0 := by
+  classical
+  by_cases hInt : (interior s).Nonempty
+  · -- Reduce to the nonempty interior case
+    exact exists_supporting_hyperplane_of_closed_convex_of_nonempty_interior
+      hs_conv hs_closed hz_mem hz_not_int hInt
+  · -- interior s = ∅: s is contained in an affine hyperplane; its normal supports with equality
+    have hs_nonempty : s.Nonempty := ⟨z, hz_mem⟩
+    have hIntEmpty : interior s = (∅ : Set E) := by
+      classical
+      by_contra hne; have : (interior s).Nonempty := by simpa [Set.nonempty_iff_ne_empty] using hne
+      exact hInt this
+    -- From previous API: s ⊆ H where H is a closed affine hyperplane (codim 1)
+    obtain ⟨H, _Hclosed, hcodim1, hs_sub_H⟩ :=
+      exists_affine_hyperplane_of_nonempty_of_interior_empty
+        (E := E) (s := s) hs_conv hs_nonempty hs_closed hIntEmpty
+    -- Build a nonzero linear functional g annihilating H.direction
+    set U : Subspace ℝ E := H.direction
+    set Q := E ⧸ U
+    have hpos : 0 < finrank ℝ Q := by simpa [Q] using (by simp [hcodim1])
+    let b : Basis (Fin (finrank ℝ Q)) ℝ Q := Module.finBasis ℝ Q
+    let gQ : Module.Dual ℝ Q := b.coord ⟨0, hpos⟩
+    let g : E →ₗ[ℝ] ℝ := gQ.comp U.mkQ
+    -- g ≠ 0
+    have hg_ne : g ≠ 0 := by
+      classical
+      obtain ⟨v0, hv0⟩ := Submodule.mkQ_surjective U (b ⟨0, hpos⟩)
+      have hgv : g v0 = gQ (b ⟨0, hpos⟩) := by
+        simpa [g, LinearMap.comp_apply] using congrArg (fun w => gQ w) hv0
+      have hgv1 : g v0 = 1 := by simpa [gQ] using hgv
+      intro hg
+      simp [hg] at hgv1
+    -- Turn g into a vector v via Riesz
+    let gCLM : E →L[ℝ] ℝ := ⟨g, LinearMap.continuous_of_finiteDimensional g⟩
+    let v : E := (InnerProductSpace.toDual ℝ E).symm gCLM
+    have hv_ne : v ≠ 0 := by
+      intro hv
+      -- identify (toDual v) with the CLM built from g
+      have h_toDual_eq :
+          (InnerProductSpace.toDual ℝ E) v = gCLM := by
+        have h :=
+          (LinearIsometryEquiv.apply_symm_apply (InnerProductSpace.toDual ℝ E) gCLM)
+        simp only [LinearIsometryEquiv.apply_symm_apply] at h
+        exact LinearIsometryEquiv.apply_symm_apply (toDual ℝ E) gCLM
+      -- from v = 0 deduce (toDual v) = 0, hence g = 0
+      have h_zero : (InnerProductSpace.toDual ℝ E) v = 0 :=
+        (InnerProductSpace.toDual ℝ E).map_eq_zero_iff.mpr hv
+      have hCLM_zero : gCLM = 0 := by
+        have h' := h_zero
+        simp [h_toDual_eq] at h'
+        exact h'
+      have : g = 0 := by
+        -- extract the linear map from the equality of CLMs
+        simpa using congrArg ContinuousLinearMap.toLinearMap hCLM_zero
+      exact hg_ne this
+    -- For y,z ∈ s ⊆ H, we have y - z ∈ U, hence g(y - z) = 0, i.e., ⟪y - z, v⟫ = 0
+    refine ⟨v, hv_ne, ?_⟩
+    intro y hy
+    have hyH : y ∈ (H : Set E) := hs_sub_H hy
+    have hzH : z ∈ (H : Set E) := hs_sub_H hz_mem
+    have hU_y : y -ᵥ z ∈ U := H.vsub_mem_direction hyH hzH
+    have : g (y - z) = 0 := by
+      -- y - z = vsub, and g kills U since U ≤ ker g
+      have hmem : y - z ∈ U := by simpa [vsub_eq_sub] using hU_y
+      -- First, note U ≤ ker g
+      have hU_le_ker : U ≤ LinearMap.ker g := by
+        intro u hu
+        have hmk : U.mkQ u = 0 := by
+          simpa [Submodule.mkQ_apply, Submodule.Quotient.mk_eq_zero] using hu
+        -- show g u = 0 by reducing via the quotient and using gQ 0 = 0
+        refine LinearMap.mem_ker.mpr ?_
+        have : gQ ((Submodule.mkQ U) u) = 0 := by
+          simp [hmk]
+        simpa [g, LinearMap.comp_apply] using this
+      -- hence g (y - z) = 0
+      simpa [LinearMap.mem_ker] using (hU_le_ker hmem)
+    -- identify g with ⟪·, v⟫ via Riesz
+    have hv_repr : ∀ x, g x = ⟪x, v⟫ := by
+      intro x
+      have h_toDual_eq :
+          (InnerProductSpace.toDual ℝ E) v = gCLM := by
+        have h :=
+          (LinearIsometryEquiv.apply_symm_apply (InnerProductSpace.toDual ℝ E) gCLM)
+        simp only [LinearIsometryEquiv.apply_symm_apply] at h
+        exact LinearIsometryEquiv.apply_symm_apply (toDual ℝ E) gCLM
+      have hx : ((InnerProductSpace.toDual ℝ E) v) x = g x := by
+        have h := h_toDual_eq
+        have : ((InnerProductSpace.toDual ℝ E) v) x = gCLM x := by simp [h]
+        simpa [gCLM]
+      simpa [InnerProductSpace.toDual_apply, real_inner_comm] using hx.symm
+    have : ⟪y - z, v⟫ = 0 := by simpa [hv_repr, map_sub] using this
+    exact this.le
+
+/-- Functional form: supporting functional in the nonempty interior case. -/
+lemma exists_supporting_hyperplane_closed_convex_of_nonempty_interior
+    {s : Set E} (hs_conv : Convex ℝ s) (hs_closed : IsClosed s)
+    {z : E} (hz_in_s : z ∈ s) (hz_not_int : z ∉ interior s)
+    (hInt : (interior s).Nonempty) :
+    ∃ g : E →L[ℝ] ℝ, g ≠ 0 ∧ ∀ y ∈ s, g y ≤ g z := by
+  obtain ⟨v, hv_ne, hv⟩ :=
+    exists_supporting_hyperplane_of_closed_convex_of_nonempty_interior
+      hs_conv hs_closed hz_in_s hz_not_int hInt
+  let g : E →L[ℝ] ℝ := (InnerProductSpace.toDual ℝ E) v
+  have hg_ne : g ≠ 0 := by
+    intro h; exact hv_ne ((InnerProductSpace.toDual ℝ E).map_eq_zero_iff.1 h)
+  refine ⟨g, hg_ne, ?_⟩
+  intro y hy
+  -- From ⟪y - z, v⟫ ≤ 0, deduce g y - g z ≤ 0, hence g y ≤ g z.
+  have gyz_sub : g y - g z ≤ 0 := by
+    have hv' : ⟪v, y - z⟫ ≤ 0 := by
+      simpa [real_inner_comm] using (hv y hy)
+    have hyz_inner_sub : ⟪v, y⟫ - ⟪v, z⟫ ≤ 0 := by
+      simpa [inner_sub_right] using hv'
+    simpa [g, InnerProductSpace.toDual_apply] using hyz_inner_sub
+  exact sub_nonpos.mp gyz_sub
+
+/-- Functional form: finite-dimensional classical supporting hyperplane theorem. -/
+lemma exists_supporting_hyperplane_closed_convex_finiteDimensional
+    [FiniteDimensional ℝ E]
     {s : Set E} (hs_conv : Convex ℝ s) (hs_closed : IsClosed s)
     {z : E} (hz_in_s : z ∈ s) (hz_not_int : z ∉ interior s) :
     ∃ g : E →L[ℝ] ℝ, g ≠ 0 ∧ ∀ y ∈ s, g y ≤ g z := by
-  -- Mathlib lemma has arguments flipped: `IsClosed s` then `Convex ℝ s`.
-  -- Use it directly and repackage to this signature.
-  simpa using
-    exists_supporting_hyperplane_of_closed_convex hs_closed hs_conv hz_in_s hz_not_int
+  obtain ⟨v, hv_ne, hv⟩ :=
+    exists_supporting_hyperplane_of_closed_convex_finiteDimensional
+      hs_conv hs_closed hz_in_s hz_not_int
+  let g : E →L[ℝ] ℝ := (InnerProductSpace.toDual ℝ E) v
+  have hg_ne : g ≠ 0 := by
+    intro h; exact hv_ne ((InnerProductSpace.toDual ℝ E).map_eq_zero_iff.1 h)
+  refine ⟨g, hg_ne, ?_⟩
+  intro y hy
+  have h' := hv y hy
+  -- From ⟪y - z, v⟫ ≤ 0, deduce g (y - z) ≤ 0, hence g y ≤ g z
+  have gyz' : g (y - z) ≤ 0 := by
+    have : g (y - z) = ⟪v, y - z⟫ := by
+      simp [g, InnerProductSpace.toDual_apply]
+    rw [this]
+    simpa [real_inner_comm] using h'
+  have gyz_sub : g y - g z ≤ 0 := by
+    simpa [map_sub] using gyz'
+  exact sub_nonpos.mp gyz_sub
 
-/-- A supporting hyperplane exists at a frontier point of a closed convex set. -/
 lemma exists_support_hyperplane_of_mem_frontier
+    [FiniteDimensional ℝ E]
     {s : Set E} (hs_conv : Convex ℝ s) (hs_closed : IsClosed s)
     {z : E} (hz_frontier : z ∈ frontier s) :
     ∃ g : E →L[ℝ] ℝ, g ≠ 0 ∧ ∀ y ∈ s, g y ≤ g z := by
-  -- z ∈ s, since s is closed and z ∈ closure s
-  have hz_cl : z ∈ closure s := frontier_subset_closure hz_frontier
-  have hz_in_s : z ∈ s := by simpa [hs_closed.closure_eq] using hz_cl
-  -- z ∉ interior s
+  have hz_in_s : z ∈ s := hs_closed.closure_eq ▸ frontier_subset_closure hz_frontier
   have hz_not_int : z ∉ interior s := not_mem_interior_of_mem_frontier hz_frontier
-  -- Apply the wrapper
-  obtain ⟨g, hg_ne, hg_bound⟩ :=
-    exists_supporting_hyperplane_closed_convex hs_conv hs_closed hz_in_s hz_not_int
-  exact ⟨g, hg_ne, hg_bound⟩
+  exact exists_supporting_hyperplane_closed_convex_finiteDimensional
+    hs_conv hs_closed hz_in_s hz_not_int
