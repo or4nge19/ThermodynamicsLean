@@ -1654,11 +1654,79 @@ open Filter Topology
 def GlobalComparisonHypothesis (System : Type u) [TW : ThermoWorld System] : Prop :=
   ∀ {Γ₁ Γ₂ : System} (X : TW.State Γ₁) (Y : TW.State Γ₂), Comparable X Y
 
+/-- Gap Lemma under GCH: Provides a UNIFORM FAMILY of gap witnesses.
+    If A ≺≺ B, then there exists δ₀ > 0 such that for ALL 0 < τ ≤ δ₀,
+    we have (A, τX₁) ≺ (B, τX₀). -/
+lemma GapLemmaGCH (Ctx : CanonicalEntropyContext Γ)
+    [Fact (GlobalComparisonHypothesis System)]
+    {ΓA ΓB : System} (A : TW.State ΓA) (B : TW.State ΓB) (h_strict : A ≺≺ B) :
+    ∃ (δ₀ : ℝ) (_ : 0 < δ₀),
+      ∀ {τ : ℝ} (hτ_pos : 0 < τ) (_ : τ ≤ δ₀),
+        comp_state (A, scale_state (ne_of_gt hτ_pos) Ctx.X₁) ≺
+        comp_state (B, scale_state (ne_of_gt hτ_pos) Ctx.X₀) := by
+  classical
+  by_contra h
+  -- Negate the goal: for all δ₀>0 there exists 0<τ≤δ₀ s.t. the forward inequality fails.
+  push_neg at h
+  -- Build a sequence τₖ with 0 < τₖ ≤ 1/(k+1) where the forward inequality fails.
+  have h_seq :
+      ∀ k : ℕ, ∃ τ, ∃ (hτ : 0 < τ), τ ≤ (1 / ((k+1 : ℝ))) ∧
+        ¬ comp_state (A, scale_state (ne_of_gt hτ) Ctx.X₁) ≺
+          comp_state (B, scale_state (ne_of_gt hτ) Ctx.X₀) := by
+    intro k
+    have hk_pos : 0 < (1 / ((k+1 : ℝ))) := by
+      exact one_div_pos.mpr (Nat.cast_add_one_pos k)
+    rcases h (1 / ((k+1 : ℝ))) hk_pos with ⟨τ, hτ_pos, hτ_le, hτ_not⟩
+    exact ⟨τ, hτ_pos, hτ_le, hτ_not⟩
+  -- Choose τₖ and its properties.
+  choose τ hτ_pos τ_le τ_not using h_seq
+  -- Show τₖ → 0 via squeeze: 0 ≤ τₖ ≤ 1/(k+1), and 1/(k+1) → 0.
+  have hτ_nonneg : ∀ n, 0 ≤ τ n := fun n => le_of_lt (hτ_pos n)
+  let ε_seq : ℕ → ℝ := fun k => 1 / ((k+1 : ℝ))
+  have hε_tendsto : Tendsto ε_seq atTop (nhds 0) :=
+    tendsto_one_div_add_atTop_nhds_zero_nat
+  have h0_tendsto : Tendsto (fun (_ : ℕ) => (0:ℝ)) atTop (nhds 0) := tendsto_const_nhds
+  have h_lower : ∀ᶠ k in atTop, (0 : ℝ) ≤ τ k :=
+    Filter.Eventually.of_forall hτ_nonneg
+  have h_upper : ∀ᶠ k in atTop, τ k ≤ ε_seq k :=
+    Filter.Eventually.of_forall τ_le
+  have hτ_tendsto : Tendsto τ atTop (nhds 0) :=
+    tendsto_of_tendsto_of_le_of_le h0_tendsto hε_tendsto h_lower h_upper
+  -- Under GCH, for each k either forward or reverse holds; forward is false, so reverse holds.
+  have h_le_rev :
+      ∀ n, comp_state (B, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₀) ≺
+           comp_state (A, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₁) := by
+    intro n
+    -- Extract GCH and apply it to the two compound states.
+    have hGCH : GlobalComparisonHypothesis System :=
+      (inferInstance : Fact (GlobalComparisonHypothesis System)).out
+    have hComp :
+        Comparable
+          (comp_state (A, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₁))
+          (comp_state (B, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₀)) :=
+      hGCH
+        (comp_state (A, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₁))
+        (comp_state (B, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₀))
+    by_cases hdir :
+      comp_state (A, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₁) ≺
+      comp_state (B, scale_state (ne_of_gt (hτ_pos n)) Ctx.X₀)
+    · exact False.elim (τ_not n hdir)
+    · -- pick the reverse from comparability
+      simpa using (Or.resolve_left hComp hdir)
+  -- A6_seq on the sequence gives B ≺ A, contradicting strictness.
+  have h_B_le_A : B ≺ A := by
+    -- Provide the existential package required by A6_seq.
+    apply TW.A6_seq B A Ctx.X₀ Ctx.X₁
+    refine ⟨τ, (fun n => hτ_pos n), hτ_tendsto, ?_⟩
+    intro k
+    simpa using h_le_rev k
+  exact h_strict.2 h_B_le_A
+
 /-- Lemma A.1 (Appendix A): The Gap Lemma.
     If A ≺≺ B and GCH holds, then there is a strict gap: ∃ δ > 0 such that (A, δX₁) ≺ (B, δX₀).
-    This is a crucial consequence of A6 (Stability) and GCH.
+    This is a major consequence of A6 (Stability) and GCH.
 -/
-lemma GapLemmaGCH {ΓA ΓB} (A : TW.State ΓA) (B : TW.State ΓB)
+lemma GapLemmaGCH' {ΓA ΓB} (A : TW.State ΓA) (B : TW.State ΓB)
   (Ctx : CanonicalEntropyContext Γ)
   [hGCH : Fact (GlobalComparisonHypothesis System)]
   (h_strict : A ≺≺ B) :
