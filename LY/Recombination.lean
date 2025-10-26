@@ -10,7 +10,7 @@ import LY.Algebra
 /-!
 # The Recombination Lemma
 
-This file builds the proof of the Recombination Lemma, a key result derived
+This file builds the proof of the Recombination Lemma, a main result derived
 from the core axioms. It states that for scalars `a, b > 0`, the state `(a+b)•X`
 is adiabatically equivalent to the compound state `(a•X, b•X)`.
 
@@ -362,7 +362,6 @@ lemma generalized_recombination_lemma {a b : ℝ} (ha : 0 ≤ a) (hb : 0 ≤ b) 
       exact thermo_equiv_trans' h_left (h_right)
     · -- a = 0, b = 0
       subst hb_zero
-      -- LHS ≈ default
       have hsum_sys : ((0:ℝ) + 0) • Γ = TW.ZSystem := by simp [TW.scale_zero_is_ZSystem]
       have hL_def :
           gscale_state (add_nonneg (by simp) (by simp)) X
@@ -372,7 +371,6 @@ lemma generalized_recombination_lemma {a b : ℝ} (ha : 0 ≤ a) (hb : 0 ≤ b) 
       have hL_equiv_default :
           gscale_state (add_nonneg (by rfl) (by rfl)) X
             ≈ (default : TW.State TW.ZSystem) := by
-        -- default ≈ casted default = LHS
         have h_def_to_L :
             (default : TW.State TW.ZSystem) ≈
               (Equiv.cast (congrArg TW.State hsum_sys)).symm
@@ -381,11 +379,9 @@ lemma generalized_recombination_lemma {a b : ℝ} (ha : 0 ≤ a) (hb : 0 ≤ b) 
             (TW.state_equiv_coherence hsum_sys.symm
               (default : TW.State TW.ZSystem))
         simpa [hL_def] using (thermo_equiv_symm h_def_to_L)
-      -- RHS ≈ default
       let zeroL : TW.State (TW.scale 0 Γ) := gscale_state (by simp) X
       let zeroR : TW.State (TW.scale 0 Γ) := gscale_state (by simp) X
       have h0_sys : (0 : ℝ) • Γ = TW.ZSystem := by simp [TW.scale_zero_is_ZSystem]
-      -- each zero component ≈ default
       have h_zeroL_def :
           zeroL ≈ (default : TW.State TW.ZSystem) := by
         have h_def_to_zeroL :
@@ -425,13 +421,10 @@ lemma generalized_recombination_lemma {a b : ℝ} (ha : 0 ≤ a) (hb : 0 ≤ b) 
       have h_R_equiv_default :
           comp_state (zeroL, zeroR) ≈ (default : TW.State TW.ZSystem) :=
         thermo_equiv_trans' h_pair_to_defaults h_ZZ_to_Z
-      -- chain LHS≈default and default≈RHS, aligning RHS pair with the concrete zeroL/zeroR via proof irrelevance
       have hA_norm2 : gscale_state (System := System) ha X = zeroL := by
         simp [zeroL]
       have hB_norm2 : gscale_state (System := System) hb X = zeroR := by
         simp [zeroR]
-      -- Now both sides match the pair (zeroL, zeroR).
-      -- Normalize zeroL/zeroR to their casted-default form so the target matches.
       simpa [hA_norm2, hB_norm2, zeroL, zeroR, gscale_state, gscale_state_zero] using
         (thermo_equiv_trans' hL_equiv_default (thermo_equiv_symm h_R_equiv_default))
 

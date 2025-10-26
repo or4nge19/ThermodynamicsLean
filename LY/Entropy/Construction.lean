@@ -1474,10 +1474,8 @@ lemma ReferenceState_one_equiv (X₀ X₁ : TW.State Γ) :
         gscale_state h1 X₀ ≈ gscale_state h2 X₀ :=
       gscale_eq_coherence (Γ := Γ) (X := X₀) (h_eq := by norm_num) (ht₁ := h1) (ht₂ := h2)
     have h_zero := gscale_zero_equiv (Γ := Γ) X₀
-    -- Chain coherence with zero scaling equivalence.
     simpa using (thermo_equiv_trans' h_coh h_zero)
   have h_1X₁ : gscale_state (show 0 ≤ (1:ℝ) by norm_num) X₁ ≈ X₁ := gscale_one_equiv X₁
-  -- Combine componentwise equivalences.
   have h_R₁_ZX₁ := L2_4_i h_0X₀ h_1X₁
   have h_ZX₁_X₁ := comp_Z_equiv_L X₁
   exact thermo_equiv_trans' h_R₁_ZX₁ h_ZX₁_X₁
@@ -1488,29 +1486,24 @@ lemma scale_split_one_plus (X : TW.State Γ) (t : ℝ) (ht_gt1 : 1 < t) :
     comp_state (X, scale_state (sub_pos.mpr ht_gt1).ne' X) := by
   let htm1_pos := sub_pos.mpr ht_gt1
   have ht_pos : 0 < t := lt_trans (by norm_num) ht_gt1
-
   -- 1. Align tX with (1+(t-1))X using CEq and CCast.
   have h_eq : t = 1 + (t-1) := by ring
   have h_sum_pos : 0 < 1 + (t-1) := by rwa [←h_eq]
   let U := scale_state h_sum_pos.ne' X
-
   let h_sys_eq := congrArg (fun r => TW.scale r Γ) h_eq
   have h_cast : scale_state ht_pos.ne' X ≈ (Equiv.cast (congrArg TW.State h_sys_eq) (scale_state ht_pos.ne' X)) :=
     TW.state_equiv_coherence h_sys_eq (scale_state ht_pos.ne' X)
   have h_ceq : (Equiv.cast (congrArg TW.State h_sys_eq) (scale_state ht_pos.ne' X)) ≈ U :=
     TW.scale_eq_coherence (Γ:=Γ) (X:=X) h_eq ht_pos.ne'
   have h_align := thermo_equiv_trans' h_cast h_ceq
-
   -- 2. Apply Recombination: U ≈ (1X, (t-1)X).
   have h_recomb := recombination_lemma (a:=1) (b:=t-1) (by norm_num) htm1_pos X
-
   -- 3. Apply C1: 1X ≈ X.
   have h_C1 := one_smul_coherence_clean X
   have h_clean :
     comp_state (scale_state (t := 1) (by norm_num) X, scale_state htm1_pos.ne' X) ≈
     comp_state (X, scale_state htm1_pos.ne' X) :=
     L2_4_i h_C1 (thermo_equiv_refl _)
-
   -- Chain: tX ≈ U ≈ (1X, (t-1)X) ≈ (X, (t-1)X).
   exact thermo_equiv_trans' h_align (thermo_equiv_trans' h_recomb h_clean)
 
@@ -1826,16 +1819,13 @@ lemma ReferenceState_reorg_continuity
           ≈ comp_state (gscale_state h_1mlam_nonneg Ctx.X₀,
                         gscale_state h_δₖ_nonneg Ctx.X₀) :=
       generalized_recombination_lemma h_1mlam_nonneg h_δₖ_nonneg Ctx.X₀
-    -- Adjust the proof term on the sum (proof irrelevance).
     have h_pi :
         gscale_state (add_nonneg h_1mlam_nonneg h_δₖ_nonneg) Ctx.X₀
           = gscale_state h_sum_nonneg Ctx.X₀ :=
       gscale_state_proof_irrel _ _ _
-    -- Assemble recombination in the desired shape.
     have h_recomb :
         gscale_state h_sum_nonneg Ctx.X₀ ≈
         comp_state (X₀_1mlam, δX₀) := by
-      -- Unfold aliases and rewrite.
       dsimp [X₀_1mlam, δX₀] at *
       simpa [h_pi] using h_recomb_base
     -- Chain: X₀_1mlamₖ ≈ ( (1-lam)+δₖ )•X₀ ≈ ((1-lam)•X₀, δₖ•X₀).
@@ -1854,9 +1844,32 @@ lemma ReferenceState_reorg_continuity
       L2_4_i (thermo_equiv_refl X₀_1mlam) (comp_comm_equiv_clean δX₀ X₁_lam)
     have h3 := assoc_equiv_L X₀_1mlam X₁_lam δX₀
     exact thermo_equiv_trans' h1 (thermo_equiv_trans' h2 h3)
-  -- Combine the chain.
   exact thermo_equiv_trans' h_LHS_step1 (thermo_equiv_trans' h_LHS_step2 h_reorg)
 
+/-- Reorganization lemma used in continuity proofs (reference ↔ shifted reference),
+    cross-context version assuming the two contexts share the same reference states. -/
+lemma ReferenceState_reorg_continuity'
+  {Δ : System}
+  (Ctx_ref Ctx_Y : CanonicalEntropyContext Δ)
+  (hX0_eq : Ctx_ref.X₀ = Ctx_Y.X₀) (hX1_eq : Ctx_ref.X₁ = Ctx_Y.X₁)
+  (lam lamₖ δₖ : ℝ) (h_eq : lam = lamₖ + δₖ)
+  (h_lam_range : 0 ≤ lam ∧ lam ≤ 1)
+  (h_lamₖ_range : 0 ≤ lamₖ ∧ lamₖ ≤ 1)
+  (h_δₖ_nonneg : 0 ≤ δₖ) :
+  comp_state (
+    ReferenceState Ctx_Y.X₀ Ctx_Y.X₁ lamₖ h_lamₖ_range.1 h_lamₖ_range.2,
+    gscale_state h_δₖ_nonneg Ctx_Y.X₁
+  ) ≈
+  comp_state (
+    ReferenceState Ctx_ref.X₀ Ctx_ref.X₁ lam h_lam_range.1 h_lam_range.2,
+    gscale_state h_δₖ_nonneg Ctx_ref.X₀
+  ) := by
+  -- Reduce to the single-context lemma by rewriting the references to match Ctx_ref.
+  -- After rewriting X₀, X₁ of Ctx_Y into Ctx_ref, this is exactly ReferenceState_reorg_continuity.
+  simpa [hX0_eq, hX1_eq] using
+    (ReferenceState_reorg_continuity
+      (Ctx := Ctx_ref)
+      lam lamₖ δₖ h_eq h_lam_range h_lamₖ_range h_δₖ_nonneg)
 
 /-! ### The Continuity Lemma (Lemma 2.8) -/
 
@@ -2049,9 +2062,7 @@ lemma CanonicalEntropyContext.ContinuityLemma_boundary_cases (X : TW.State Γ)
         comp_state (Ctx.X₀, scale_state (ne_of_gt (hε_pos n)) Ctx.X₀) ≺
         comp_state (X,     scale_state (ne_of_gt (hε_pos n)) Ctx.X₁) := by
       intro n
-      --dsimp [GenRefAccessible] at (h_access_neg n)
       rcases (h_access_neg n) with ⟨hG, hlt0⟩
-      -- Unfold negative case of GenRefAccessible
       have h_not_range : ¬ (0 ≤ lam_seq n ∧ lam_seq n ≤ 1) := by
         intro h; exact (not_lt.mpr h.1) (h_neg n)
       have h_not_gt1 : ¬ (1 < lam_seq n) := by
@@ -2087,19 +2098,14 @@ lemma CanonicalEntropyContext.ContinuityLemma_boundary_cases (X : TW.State Γ)
           -- CEq for scaling equality (handled by gscale path earlier in file; we re-express
           -- via scale_eq_coherence through casts). Here we supply a short direct step:
           -- Use the structural equality of systems; we treat this as cast-equivalence neutrality.
-          -- (For brevity; in a fully expanded formalization one would mirror earlier cast lemmas.)
           have : 1 - lam = 1 + (-lam) := h_eq
-          -- rewriting systems identical
-          -- Provide reflexive equivalence:
           exact thermo_equiv_refl _
-        -- Chain
         exact
           thermo_equiv_trans'
             h_cast
             (thermo_equiv_trans'
               h_re
               (L2_4_i h1X (thermo_equiv_refl _)))
-      -- Replace left side of hG using equivalence
       have h_transport :
         comp_state (Ctx.X₀, scale_state (ne_of_gt h_pos_eps) Ctx.X₀) ≺
         comp_state (X, scale_state (ne_of_gt h_pos_eps) Ctx.X₁) :=
@@ -2288,7 +2294,7 @@ omit [HasLambdaWitness Ctx] [Fact (GlobalComparisonHypothesis System)] in
 /-- Auxiliary: convert a gap
     (R_lam , ε X₁) ≺ (X , ε X₀) with 0 ≤ lam ≤ 1, ε>0, lam+ε ≤ 1
     into R_{lam+ε} ≺ X, using the reorganization lemma and cancellation. -/
-private lemma gap_promotes_lambda
+lemma gap_promotes_lambda
   (X : TW.State Γ)
   {lam eps : ℝ}
   (hlam : 0 ≤ lam ∧ lam ≤ 1)
@@ -2348,7 +2354,7 @@ private lemma gap_promotes_lambda
 
 omit [HasLambdaWitness Ctx] [Fact (GlobalComparisonHypothesis System)] in
 /-- (1) Boundary case lam = 1: a strict gap produces lam' = 1+δ ∈ lam(X), contradicts maximality. -/
-private lemma gap_boundary_lambda_one
+lemma gap_boundary_lambda_one
   (X : TW.State Γ)
   {δ : ℝ} (hδ_pos : 0 < δ) (h_sup : Ctx.S X = 1)
   (h_gap :
@@ -2409,7 +2415,7 @@ private lemma gap_boundary_lambda_one
   exact h_contra h_le
 
 /-- (2) Choose ε from δ when lam < 1 so that 0 < ε ≤ (1-lam)/2 and ε ≤ δ/2 (gives lam+ε ≤ 1). -/
-private lemma choose_eps_for_interior
+lemma choose_eps_for_interior
   {lam δ : ℝ} (hlam_lt1 : lam < 1) (hδ_pos : 0 < δ) :
   ∃ ε, 0 < ε ∧ ε ≤ (1 - lam)/2 ∧ ε ≤ δ/2 ∧ lam + ε ≤ 1 := by
   set ε := min ((1 - lam)/2) (δ/2)
@@ -2436,7 +2442,7 @@ omit [HasLambdaWitness Ctx] [Fact (GlobalComparisonHypothesis System)] in
     Given a family of catalytic gaps at all scales `0 < ε ≤ δ`, we can of course
     extract the desired ε–gap. This replaces the unsound earlier version that
     tried to derive the ε–gap from a single δ–gap without a uniform hypothesis. -/
-private lemma shrink_gap_to_eps
+lemma shrink_gap_to_eps
   (X : TW.State Γ)
   {lam δ ε : ℝ}
   (hlam_nonneg : 0 ≤ lam)
@@ -2466,7 +2472,7 @@ private lemma shrink_gap_to_eps
 
 omit [HasLambdaWitness Ctx] [Fact (GlobalComparisonHypothesis System)] in
 /-- (4) Interior promotion: from ε-gap obtain lam+ε in lam(X) (via `gap_promotes_lambda`). -/
-private lemma promote_lambda_interior
+lemma promote_lambda_interior
   (X : TW.State Γ)
   {lam ε : ℝ}
   (hlam : 0 ≤ lam ∧ lam ≤ 1)
@@ -2494,7 +2500,7 @@ omit [HasLambdaWitness Ctx] [Fact (GlobalComparisonHypothesis System)] in
     required so that `lam + ε ≤ 1`). From such a family and `lam < 1` with
     `lam = S(X)` we derive a contradiction by promoting `lam` to `lam+ε`
     inside the Lambda set, contradicting maximality of `lam = S(X)`. -/
-private lemma interior_gap_contradiction
+lemma interior_gap_contradiction
   (X : TW.State Γ)
   {lam : ℝ}
   (hlam : 0 ≤ lam ∧ lam ≤ 1) (hlam_lt1 : lam < 1)
